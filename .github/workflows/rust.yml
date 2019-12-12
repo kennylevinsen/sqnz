@@ -1,0 +1,22 @@
+name: Rust
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
+    - name: Build release
+      run: cargo build --release
+    - name: Create release
+      uses: actions/upload-artifact@v1.0.0
+      with:
+        name: "sqnz-linux"
+        path: "target/release/sqnz"
