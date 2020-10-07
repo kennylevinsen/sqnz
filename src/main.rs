@@ -5,7 +5,7 @@ use std::io::Write;
 use std::path::Path;
 use std::sync;
 
-use warp::{self, Filter};
+use warp::{self, Filter, http::Response};
 
 struct Server {}
 
@@ -43,7 +43,8 @@ impl Server {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let port = match env::var("SQNZ_PORT").unwrap_or("8080".to_string()).parse() {
         Ok(v) => v,
         Err(e) => {
@@ -63,42 +64,48 @@ fn main() {
     };
 
     let s1 = s.clone();
-    let consume = warp::post2()
+    let consume = warp::post()
         .and(warp::path::param::<String>())
         .and(warp::path::param::<String>())
-        .and_then(move |project: String, tag: String| {
+        .map(move |project: String, tag: String| {
             match s1
                 .lock()
                 .unwrap()
                 .consume_sequence(project.as_str(), tag.as_str())
             {
-                Ok(v) => Ok(format!("{}", v)),
+                Ok(v) => Response::builder()
+                            .body(format!("{}", v)),
                 Err(e) => {
                     println!("could not consume sequence: {}", e);
-                    Err(warp::reject::not_found())
+                    Response::builder()
+                        .status(500)
+                        .body(format!("could not consume sequence: {}", e))
                 }
             }
         });
 
     let s2 = s.clone();
-    let peek = warp::get2()
+    let peek = warp::get()
         .and(warp::path::param::<String>())
         .and(warp::path::param::<String>())
-        .and_then(move |project: String, tag: String| {
+        .map(move |project: String, tag: String| {
             match s2
                 .lock()
                 .unwrap()
                 .peek_sequence(project.as_str(), tag.as_str())
             {
-                Ok(v) => Ok(format!("{}", v)),
+                Ok(v) => Response::builder()
+                            .body(format!("{}", v)),
                 Err(e) => {
                     println!("could not peek at sequence: {}", e);
-                    Err(warp::reject::not_found())
+                    Response::builder()
+                        .status(500)
+                        .body(format!("could not peek at sequence: {}", e))
                 }
             }
         });
 
-    let help = warp::get2().map(|| {
+    let help = warp::get().map(|| {
         format!(
             "
 sqnz (https://github.com/kennylevinsen/sqnz)
@@ -115,5 +122,5 @@ To peek at the current sequence number without consuming it, GET /PROJECT/TAG:
         )
     });
 
-    warp::serve(consume.or(peek).or(help)).run(([0, 0, 0, 0], port));
+    warp::serve(consume.or(peek).or(help)).run(([0, 0, 0, 0], port)).await;
 }
