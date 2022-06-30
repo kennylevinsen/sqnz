@@ -5,7 +5,7 @@ use std::io::Write;
 use std::path::Path;
 use std::sync;
 
-use warp::{self, Filter, http::Response};
+use warp::{self, Buf, Filter, http::Response};
 
 struct Server {}
 
@@ -66,13 +66,23 @@ async fn main() {
     let s1 = s.clone();
     let consume = warp::post()
         .and(warp::path::param::<String>())
-        .and(warp::path::param::<String>())
-        .map(move |project: String, tag: String| {
+        .and(warp::body::content_length_limit(128))
+        .and(warp::body::bytes())
+        .map(move |project: String, bytes: bytes::Bytes| {
+            let tag = match std::str::from_utf8(bytes.chunk()) {
+                Ok(s) => s,
+                Err(e) => {
+                    println!("could not read body: {}", e);
+                    return Response::builder()
+                        .status(500)
+                        .body(format!("could not consume sequence: {}", e));
+                }
+            };
+
             match s1
                 .lock()
                 .unwrap()
-                .consume_sequence(project.as_str(), tag.as_str())
-            {
+                .consume_sequence(project.as_str(), tag) {
                 Ok(v) => Response::builder()
                             .body(format!("{}", v)),
                 Err(e) => {
